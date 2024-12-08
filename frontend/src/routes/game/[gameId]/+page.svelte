@@ -138,48 +138,43 @@
     }
 
     function setupCameraForQuadrant(mazeSize, quadrant = "top-left") {
-        // along the limiting dimension. Assuming aspect >= 1 (typical landscape):
         const fovInRadians = THREE.MathUtils.degToRad(fov / 2);
         const halfMaze = mazeSize / 2; // we want to see exactly one quadrant
         // visibleHeightAtDistance = 2 * d * tan(fov/2), we want visibleHeightAtDistance = halfMaze
         // d = (halfMaze / 2) / tan(fov/2) = (mazeSize/4) / tan(fov/2)
-        const d = mazeSize / 3.5 / Math.tan(fovInRadians);
+        const d = (mazeSize + 0.5) / 4 / Math.tan(fovInRadians);
+
+        const ratio = window.innerWidth / window.innerHeight;
+        const horizontalBlocks = 5.5 * ratio;
 
         // Determine center of chosen quadrant
         let centerX, centerY;
         switch (quadrant) {
             case "top-left":
-                centerX = mazeSize / 4;
+                centerX = mazeSize / 2 - horizontalBlocks / 2;
                 centerY = mazeSize * (3 / 4);
                 break;
             case "top-right":
-                centerX = mazeSize * (3 / 4);
+                centerX = mazeSize / 2 + horizontalBlocks / 2;
                 centerY = mazeSize * (3 / 4);
                 break;
             case "bottom-left":
-                centerX = mazeSize / 4;
+                centerX = mazeSize / 2 - horizontalBlocks / 2;
                 centerY = mazeSize / 4;
                 break;
             case "bottom-right":
-                centerX = mazeSize * (3 / 4);
+                centerX = mazeSize / 2 + horizontalBlocks / 2;
                 centerY = mazeSize / 4;
                 break;
             default:
                 // default to top-left if not specified
-                centerX = mazeSize / 4;
+                centerX = mazeSize / 2 + horizontalBlocks / 2;
                 centerY = mazeSize * (3 / 4);
                 break;
         }
 
-        // Position the camera above the center of that quadrant
-        // Assuming maze is in XZ plane and Y is up
         camera.position.set(centerX, centerY, d);
-
-        // Look straight down at the center of the quadrant
-        // Since we are above and want to look down along -Y direction, we can rotate accordingly.
-        // One approach: Rotate the camera to look down:
-        // By default, camera looks along -Z. We can use lookAt to point it at (centerX,0,centerZ).
-        camera.lookAt(new THREE.Vector3(centerX, centerZ, 0));
+        camera.lookAt(new THREE.Vector3(centerX, centerY, 0));
     }
 
     function updatePlayers(players) {
@@ -507,7 +502,7 @@
         border-radius: 10px;
         z-index: 10;
         text-align: center;
-        font-size: 20px;
+        font-size: 15px;
         font-family: "Hahmlet Variable", serif;
         font-weight: 400;
     }
@@ -525,11 +520,11 @@
 
     button {
         z-index: 20;
-        padding: 10px 30px;
+        padding: 5px 15px;
         border-radius: 20px;
         /* border: none; */
         background-color: aliceblue;
-        font-size: 25px;
+        font-size: 18px;
         font-weight: 600;
         margin: 10px;
     }
@@ -550,12 +545,12 @@
     }
 
     .timer {
-        font-size: 40px;
+        font-size: 20px;
         font-family: "Sixtyfour Convergence Variable", monospace;
         font-weight: 400;
     }
     .arrive {
-        font-size: 20px;
+        font-size: 15px;
         font-family: "Hahmlet Variable", serif;
         font-weight: 400;
     }
