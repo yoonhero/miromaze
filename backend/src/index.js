@@ -225,6 +225,12 @@ class GameServer {
                 }
             });
 
+            socket.on("reset-game", (data) => {
+                const { roomId } = data;
+                const room = this.rooms.get(roomId);
+                room.ready.delete(socket.id);
+            });
+
             socket.on("leave-room", (roomId) => {
                 try {
                     const room = this.rooms.get(roomId);

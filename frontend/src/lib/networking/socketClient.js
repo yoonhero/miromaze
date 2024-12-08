@@ -105,6 +105,12 @@ class SocketClient {
         });
     }
 
+    resetGame() {
+        if (!this.socket) return;
+
+        this.socket.emit("reset-game", { roomId: get(this.roomId) });
+    }
+
     setupRoomListeners() {
         if (!this.socket) return;
 

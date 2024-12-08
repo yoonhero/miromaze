@@ -13,7 +13,8 @@
 
     // let start = $state(false);
     let ready = $state(false);
-    let timer = $state(30);
+    let timer = $state(15);
+    const gameTime = 15;
 
     let keysPressed = {};
     // Room ID from route params
@@ -81,20 +82,24 @@
     });
 
     function resetGame() {
+        socketClient.resetGame();
         isStart.set(false);
 
         const myPlayerMesh = playerMeshes[$me];
         const myPlayerBody = playerBodies[$me];
-        const myInfo = players[$me];
+
         if (myPlayerBody && myPlayerMesh) {
             myPlayerMesh.position.copy(myPlayerBody.position);
             myPlayerMesh.quaternion.copy(myPlayerBody.quaternion);
 
-            const { x, y } = myInfo.startPos;
+            const { x, y } = myPlayerBody.userData.startPos;
             myPlayerBody.position.set(x, y, player_z - 0.5 + 0.25);
             myPlayerBody.velocity.x = 0;
             myPlayerBody.velocity.y = 0;
         }
+
+        ready = false;
+        timer = gameTime + Math.floor(Math.random() * 5);
     }
 
     // Parameters
@@ -217,6 +222,7 @@
         playerMesh.userData.id = id; // player.id to move it
         playerBody.userData = {};
         playerBody.userData.id = id;
+        playerBody.userData.startPos = position;
         playerMeshes[id] = playerMesh;
         playerBodies[id] = playerBody;
         scene.add(playerMesh);
@@ -446,7 +452,7 @@
                     <li>4개의 패드 또는 핸드폰을 모은 후에 각각 컨트롤러의 블루투스와 연결합니다.(아이폰은 안됨요..)</li>
                     <li>이 주소로 접속한 후에 4개의 기기를 잘 배열하여 하나의 큰 맵을 만듭니다.</li>
                     <li>
-                        Ready! 버튼을 누른 후에 게임이 시작하면 30초 안에 머리에 쓴 컨트롤러를 다른 사람이 조정하여 가운데 도착 지점에 모두가 도착하면 성공!
+                        Ready! 버튼을 누른 후에 게임이 시작하면 15초 안에 머리에 쓴 컨트롤러를 다른 사람이 조정하여 가운데 도착 지점에 모두가 도착하면 성공!
                     </li>
                 </ol>
             </div>
