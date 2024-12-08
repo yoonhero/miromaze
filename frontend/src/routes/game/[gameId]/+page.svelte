@@ -6,12 +6,20 @@
     import { socketClient } from "$lib/networking/socketClient";
     import StatusLed from "$lib/components/statusLED.svelte";
     import CannonDebugger from "cannon-es-debugger";
+    import "@fontsource-variable/sixtyfour-convergence";
+    // Supports weights 100-900
+    import "@fontsource-variable/hahmlet";
+    import { writable } from "svelte/store";
+
+    // let start = $state(false);
+    let ready = $state(false);
+    let timer = $state(30);
 
     let keysPressed = {};
     // Room ID from route params
     let gameId = $derived($page.params.gameId);
 
-    let { players, me, mapInfo } = socketClient;
+    let { players, me, mapInfo, isArrive, totalArrived, isStart } = socketClient;
     let totalPlayer = $derived($players.length);
 
     let canvas;
@@ -26,6 +34,7 @@
     const player_z = 1;
 
     let cannonDebugger;
+    let interval;
 
     onMount(async () => {
         // Connect to socket server
@@ -42,6 +51,20 @@
             const unsubscribe1 = socketClient.players.subscribe(updatePlayers);
             const unsubscribe2 = socketClient.collisionCount.subscribe(() => publishPos($me));
             const unsubscribe3 = socketClient.mapInfo.subscribe(() => makeMap());
+            socketClient.isArrive.subscribe(() => socketClient.arriveEvent());
+            socketClient.isStart.subscribe(() => {
+                if ($isStart) {
+                    interval = setInterval(() => {
+                        if (timer > 0) {
+                            timer -= 1;
+                        } else {
+                            resetGame();
+                        }
+                    }, 1000);
+                } else {
+                    clearInterval(interval);
+                }
+            });
 
             return unsubscribe1, unsubscribe2;
         } catch (error) {
@@ -54,16 +77,39 @@
         socketClient.leaveRoom();
         socketClient.disconnect();
         // physicsWorld.removeEventl
+        clearInterval(interval);
     });
+
+    function resetGame() {
+        isStart.set(false);
+
+        const myPlayerMesh = playerMeshes[$me];
+        const myPlayerBody = playerBodies[$me];
+        const myInfo = players[$me];
+        if (myPlayerBody && myPlayerMesh) {
+            myPlayerMesh.position.copy(myPlayerBody.position);
+            myPlayerMesh.quaternion.copy(myPlayerBody.quaternion);
+
+            const { x, y } = myInfo.startPos;
+            myPlayerBody.position.set(x, y, player_z - 0.5 + 0.25);
+            myPlayerBody.velocity.x = 0;
+            myPlayerBody.velocity.y = 0;
+        }
+    }
+
+    // Parameters
+    const fov = 10; // field of view in degrees
+    const near = 0.1;
+    const far = 1000;
 
     function initThreeScene() {
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, 0.1, far);
         renderer = new THREE.WebGLRenderer({ canvas });
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        camera.position.set(0, 0, 10);
-        camera.lookAt(0, 0, 0);
+        camera.position.set(5, 5, 20);
+        camera.lookAt(5, 5, 0);
         // Position camera
         // camera.position.z = 10;
 
@@ -77,24 +123,6 @@
 
         physicsWorld = new World();
 
-        // addCube([1, 1, 1]);
-        // buildPlane({ n: 5, m: 5 });
-        // buildWalls(
-        //     [
-        //         { x: 1, y: 1 },
-        //         { x: 1, y: 2 },
-        //         { x: 2, y: 3 },
-        //     ],
-        //     "ho"
-        // );
-        // buildWalls(
-        //     [
-        //         { x: 1, y: 3 },
-        //         { x: 2, y: 4 },
-        //     ],
-        //     "ver"
-        // );
-
         animate();
     }
 
@@ -104,8 +132,54 @@
         buildWalls($mapInfo.hwall, "ho");
         buildWalls($mapInfo.vwall, "ver");
 
+        setupCameraForQuadrant(10, $mapInfo.whereLocate);
         // Adding gravity after map initialization.
         physicsWorld.gravity.set(0, 0, -9.8);
+    }
+
+    function setupCameraForQuadrant(mazeSize, quadrant = "top-left") {
+        // along the limiting dimension. Assuming aspect >= 1 (typical landscape):
+        const fovInRadians = THREE.MathUtils.degToRad(fov / 2);
+        const halfMaze = mazeSize / 2; // we want to see exactly one quadrant
+        // visibleHeightAtDistance = 2 * d * tan(fov/2), we want visibleHeightAtDistance = halfMaze
+        // d = (halfMaze / 2) / tan(fov/2) = (mazeSize/4) / tan(fov/2)
+        const d = mazeSize / 3.5 / Math.tan(fovInRadians);
+
+        // Determine center of chosen quadrant
+        let centerX, centerY;
+        switch (quadrant) {
+            case "top-left":
+                centerX = mazeSize / 4;
+                centerY = mazeSize * (3 / 4);
+                break;
+            case "top-right":
+                centerX = mazeSize * (3 / 4);
+                centerY = mazeSize * (3 / 4);
+                break;
+            case "bottom-left":
+                centerX = mazeSize / 4;
+                centerY = mazeSize / 4;
+                break;
+            case "bottom-right":
+                centerX = mazeSize * (3 / 4);
+                centerY = mazeSize / 4;
+                break;
+            default:
+                // default to top-left if not specified
+                centerX = mazeSize / 4;
+                centerY = mazeSize * (3 / 4);
+                break;
+        }
+
+        // Position the camera above the center of that quadrant
+        // Assuming maze is in XZ plane and Y is up
+        camera.position.set(centerX, centerY, d);
+
+        // Look straight down at the center of the quadrant
+        // Since we are above and want to look down along -Y direction, we can rotate accordingly.
+        // One approach: Rotate the camera to look down:
+        // By default, camera looks along -Z. We can use lookAt to point it at (centerX,0,centerZ).
+        camera.lookAt(new THREE.Vector3(centerX, centerZ, 0));
     }
 
     function updatePlayers(players) {
@@ -192,15 +266,16 @@
         });
     }
 
-    function buildPlanes(size) {
+    function buildPlanes(size, endPos) {
         // const [x0, y0] = start_pos;
         // const [height, width] = size;
         const { n: width, m: height } = size;
         for (let i = 0; i < height; i++) {
             cubes.push([]);
             for (let j = 0; j < width; j++) {
+                const isEnd = endPos.x == j && endPos.y == i;
                 let pos = [j, i, plane_z];
-                const { cube, groundBody } = drawCube(pos);
+                const { cube, groundBody } = drawCube(pos, isEnd);
                 cubes[i].push(cube);
                 scene.add(cube);
                 physicsWorld.addBody(groundBody);
@@ -214,11 +289,28 @@
     }
     // The baseline of placine is center of object
     // 1x1x1 cube
-    function drawCube(position) {
+    function drawCube(position, isEnd = false) {
         let shape = [1, 1, 1];
-        const geometry = new THREE.BoxGeometry(...shape);
-        const edges = new THREE.EdgesGeometry(geometry);
-        const cube = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff }));
+        let cube;
+        if (!isEnd) {
+            const geometry = new THREE.BoxGeometry(...shape);
+            const edges = new THREE.EdgesGeometry(geometry);
+            cube = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: "#ffffff" }));
+        } else {
+            const geometry = new THREE.BoxGeometry(...shape);
+            const red = "#D30000";
+            const material = new THREE.MeshBasicMaterial({ color: red });
+            // const textTexture = createTextTexture({ text: "END", bgColor: red });
+            // const material = [
+            //     new THREE.MeshLambertMaterial({ color: red }),
+            //     new THREE.MeshLambertMaterial({ color: red }),
+            //     new THREE.MeshLambertMaterial({ color: red }),
+            //     new THREE.MeshLambertMaterial({ color: red }),
+            //     new THREE.MeshLambertMaterial({ map: textTexture }),
+            //     new THREE.MeshLambertMaterial({ color: red }),
+            // ];
+            cube = new THREE.Mesh(geometry, material);
+        }
         cube.position.set(...position);
         const groundBody = new Body({
             type: Body.STATIC, // Static body
@@ -258,7 +350,6 @@
         socketClient.movePlayer(playerBodies[id].position.clone());
     }
 
-    let theta = 0;
     function animate() {
         let radius = 10;
 
@@ -268,7 +359,6 @@
 
         updatePlayerMovement();
 
-        // updatePlayers();
         const myPlayerMesh = playerMeshes[$me];
         const myPlayerBody = playerBodies[$me];
         if (myPlayerBody && myPlayerMesh) {
@@ -279,10 +369,17 @@
                 // publish the player change position to peer
                 publishPos($me);
             }
+
+            // sqrt(2) = 1.414
+            if (Math.sqrt(Math.pow(myPlayerBody.position.x - $mapInfo.endPos.x, 2) + Math.pow(myPlayerBody.position.y - $mapInfo.endPos.y, 2)) < 0.75) {
+                isArrive.set(true);
+            } else {
+                isArrive.set(false);
+            }
         }
-        if (cannonDebugger) {
-            cannonDebugger.update();
-        }
+        // if (cannonDebugger) {
+        //     cannonDebugger.update();
+        // }
         requestAnimationFrame(animate);
         renderer.render(scene, camera);
     }
@@ -290,7 +387,7 @@
     function updatePlayerMovement() {
         let player = playerMeshes[$me];
         let playerBody = playerBodies[$me];
-        if (!player || !playerBody) return;
+        if (!player || !playerBody || !$isStart) return;
         const moveSpeed = 1;
 
         if (keysPressed["KeyW"]) {
@@ -334,17 +431,49 @@
     //     camera.updateProjectionMatrix();
     //     renderer.setSize(window.innerWidth, window.innerHeight);
     // }
+    function setReady() {
+        ready = true;
+        socketClient.setReady();
+    }
 </script>
 
 <svelte:window on:keydown={onKeyDown} on:keyup={onKeyUp} />
-
 <div class="room-container">
-    <div class="room-info">
-        <h2>Room {gameId}</h2>
-        <p>Players: {totalPlayer}/4</p>
+    {#if !$isStart}
+        <div class="room-info">
+            <div class="cur">
+                <h2>Room {gameId}</h2>
+                <p>플레이어: {totalPlayer}/4</p>
+            </div>
+            <div>
+                <h3>How to Play</h3>
+                <ol>
+                    <li>4개의 패드 또는 핸드폰을 모은 후에 각각 컨트롤러의 블루투스와 연결합니다.(아이폰은 안됨요..)</li>
+                    <li>이 주소로 접속한 후에 4개의 기기를 잘 배열하여 하나의 큰 맵을 만듭니다.</li>
+                    <li>
+                        Ready! 버튼을 누른 후에 게임이 시작하면 30초 안에 머리에 쓴 컨트롤러를 다른 사람이 조정하여 가운데 도착 지점에 모두가 도착하면 성공!
+                    </li>
+                </ol>
+            </div>
+
+            <button onclick={() => setReady()} disabled={ready}>
+                {#if ready}
+                    Waiting...
+                {:else}
+                    Ready!
+                {/if}
+            </button>
+        </div>
+    {/if}
+
+    <div class="game-status">
+        <div class="timer">{timer}</div>
+        {#if $isArrive}
+            <div class="arrive">도착: {$totalArrived}/4!!</div>
+        {/if}
     </div>
 
-    <StatusLed></StatusLed>
+    <StatusLed />
     <canvas bind:this={canvas}></canvas>
 </div>
 
@@ -369,13 +498,66 @@
 
     .room-info {
         position: absolute;
-        top: 10px;
-        left: 10px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
         background-color: rgba(204, 201, 201, 0.859);
         color: white;
-        padding: 10px;
+        padding: 30px 20px;
         border-radius: 10px;
         z-index: 10;
+        text-align: center;
+        font-size: 20px;
+        font-family: "Hahmlet Variable", serif;
+        font-weight: 400;
+    }
+
+    .room-info > div {
+        color: black;
+        border: 4px dotted black;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
+
+    .room-info > div > ol {
+        padding: 0 50px;
+    }
+
+    button {
+        z-index: 20;
+        padding: 10px 30px;
+        border-radius: 20px;
+        /* border: none; */
+        background-color: aliceblue;
+        font-size: 25px;
+        font-weight: 600;
+        margin: 10px;
+    }
+    /* button:hover {
+        transform: scale(1.2);
+    } */
+    button:focus {
+        outline: 2px solid red;
+    }
+
+    .game-status {
+        position: absolute;
+        top: 20px;
+        color: white;
+        left: 50%;
+        transform: translate(-50%);
+        text-align: center;
+    }
+
+    .timer {
+        font-size: 40px;
+        font-family: "Sixtyfour Convergence Variable", monospace;
+        font-weight: 400;
+    }
+    .arrive {
+        font-size: 20px;
+        font-family: "Hahmlet Variable", serif;
+        font-weight: 400;
     }
 
     canvas {

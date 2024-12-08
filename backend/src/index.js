@@ -67,12 +67,13 @@ class GameServer {
                     if (!this.rooms.get(roomId)) {
                         const startPoses = [
                             { x: 0, y: 0 },
-                            { x: 4, y: 0 },
-                            { x: 0, y: 4 },
-                            { x: 4, y: 4 },
+                            { x: 10, y: 0 },
+                            { x: 0, y: 10 },
+                            { x: 10, y: 10 },
                         ];
-                        const endPos = { x: 2, y: 2 };
-                        const map = generateMap(10, 10, startPoses);
+                        const endPos = { x: 5, y: 5 };
+                        // Calculate 1/1+0 density to prevent weird map?
+                        const map = generateMap(11, 11, startPoses, endPos);
                         const { planes, hwall, vwall } = getLandmark(map);
                         const room = {
                             id: roomId,
@@ -84,6 +85,8 @@ class GameServer {
                             vwall,
                             startPoses,
                             endPos,
+                            arrived: new Set(),
+                            ready: new Set(),
                         };
                         this.rooms.set(roomId, room);
                     }
@@ -100,16 +103,16 @@ class GameServer {
                     const currentTotalPlayers = room.players.size;
                     const toreadable = (pos) => `${pos.x}.${pos.y}`;
                     const existedPoses = Array.from(room.players.values()).map((player) => toreadable(player.startPos));
-                    console.log(existedPoses);
 
                     // Add player to room
                     if (currentTotalPlayers < room.maxPlayers) {
-                        let startPos;
+                        const locates = ["bottom-left", "bottom-right", "top-left", "top-right"];
+                        let startPos, whereLocate;
                         // Select Position
                         for (let i = 0; i < room.maxPlayers; i++) {
                             startPos = room.startPoses[i];
+                            whereLocate = locates[i];
                             if (existedPoses.indexOf(toreadable(startPos)) == -1) {
-                                console.log("?", existedPoses);
                                 break;
                             }
                         }
@@ -131,6 +134,7 @@ class GameServer {
                             vwall: room.vwall,
                             planes: room.planes,
                             endPos: room.endPos,
+                            whereLocate,
                         };
 
                         callback({
@@ -175,6 +179,49 @@ class GameServer {
                     socket.to(userId).emit("you-collide");
                 } catch (error) {
                     console.error("collision event error: ", error);
+                }
+            });
+
+            socket.on("player-arrive", (data, callback) => {
+                try {
+                    const { roomId, isArrive } = data;
+
+                    const room = this.rooms.get(roomId);
+                    if (isArrive) {
+                        room.arrived.add(socket.id);
+                    } else {
+                        room.arrived.delete(socket.id);
+                    }
+
+                    socket.to(roomId).emit("anyone-arrived", room.arrived.size);
+                    callback({
+                        success: true,
+                        totalArrived: room.arrived.size,
+                    });
+                } catch (error) {
+                    console.log("Player Arrive Error:", error);
+
+                    callback({
+                        success: false,
+                    });
+                }
+            });
+
+            socket.on("player-ready", (data, callback) => {
+                try {
+                    const { roomId } = data;
+
+                    const room = this.rooms.get(roomId);
+                    room.ready.add(socket.id);
+
+                    if (room.ready.size == room.maxPlayers) {
+                        socket.to(roomId).emit("start-game");
+                        callback({ full: true, success: true });
+                    }
+                    callback({ full: false, success: true });
+                } catch (error) {
+                    console.log("Player Arrive Error:", error);
+                    callback({ success: false });
                 }
             });
 

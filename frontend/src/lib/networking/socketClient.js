@@ -6,6 +6,7 @@ class SocketClient {
         this.socket = null;
         this.me = writable(null);
         this.players = writable([]);
+        this.isStart = writable(false);
 
         // Map info
         // this.vwall = writable([]);
@@ -19,6 +20,8 @@ class SocketClient {
         this.error = writable(null);
 
         this.collisionCount = writable(0);
+        this.isArrive = writable(false);
+        this.totalArrived = writable(0);
     }
 
     isMe = (id) => {
@@ -92,6 +95,16 @@ class SocketClient {
         });
     }
 
+    setReady() {
+        if (!this.socket) return;
+
+        this.socket.emit("player-ready", { roomId: get(this.roomId) }, (response) => {
+            if (response?.success) {
+                this.isStart.set(response?.full);
+            }
+        });
+    }
+
     setupRoomListeners() {
         if (!this.socket) return;
 
@@ -121,6 +134,14 @@ class SocketClient {
             //     this.socket.ti
             this.collisionCount.update((c) => c + 1);
         });
+
+        this.socket.on("anyone-arrived", (total) => {
+            this.totalArrived.set(total);
+        });
+
+        this.socket.on("start-game", () => {
+            this.isStart.set(true);
+        });
     }
 
     movePlayer(position) {
@@ -130,6 +151,23 @@ class SocketClient {
             position: { x: position.x, y: position.y },
             roomId: get(this.roomId),
         });
+    }
+
+    arriveEvent() {
+        if (!this.socket) return;
+
+        this.socket.emit(
+            "player-arrive",
+            {
+                roomId: get(this.roomId),
+                isArrive: get(this.isArrive),
+            },
+            (response) => {
+                if (response?.success) {
+                    this.totalArrived.set(response.totalArrived);
+                }
+            }
+        );
     }
 
     collide(id) {
