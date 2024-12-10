@@ -8,7 +8,7 @@
     let connected;
 
     onMount(() => {
-        socketClient.connect();
+        socketClient.connect(import.meta.env.VITE_PUBLIC_API_SERVER);
     });
 
     let roomId = ""; // User inputs the custom room number

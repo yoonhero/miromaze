@@ -12,7 +12,7 @@ class GameServer {
         this.colors = ["#FF8080", "#FFCF96", "#F6FDC3", "#CDFAD5", "#B9F3FC", "#AEE2FF", "#FEDEFF"];
         this.io = new Server(this.server, {
             cors: {
-                origin: "http://localhost:5173", // Svelte dev server
+                origin: "*",
                 methods: ["GET", "POST"],
             },
         });

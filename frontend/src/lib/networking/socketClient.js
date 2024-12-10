@@ -32,6 +32,7 @@ class SocketClient {
     connect(url = "http://localhost:3000") {
         try {
             this.socket = io(url, {
+                path: "/api/socket.io",
                 reconnection: true,
                 reconnectionAttempts: 5,
                 reconnectionDelay: 1000,

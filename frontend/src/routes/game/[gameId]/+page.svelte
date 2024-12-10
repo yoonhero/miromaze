@@ -9,7 +9,11 @@
     import "@fontsource-variable/sixtyfour-convergence";
     // Supports weights 100-900
     import "@fontsource-variable/hahmlet";
-    import { writable } from "svelte/store";
+    import { get, writable } from "svelte/store";
+    import { browser } from "$app/environment";
+    import Joystick from "$lib/components/joystick.svelte";
+    import { angleStore } from "$lib/store";
+    // import BtController from "$lib/networking/btController.svelte";
 
     // let start = $state(false);
     let ready = $state(false);
@@ -39,7 +43,7 @@
 
     onMount(async () => {
         // Connect to socket server
-        socketClient.connect();
+        socketClient.connect(import.meta.env.VITE_PUBLIC_API_SERVER);
 
         try {
             // Join the room
@@ -147,7 +151,7 @@
         const halfMaze = mazeSize / 2; // we want to see exactly one quadrant
         // visibleHeightAtDistance = 2 * d * tan(fov/2), we want visibleHeightAtDistance = halfMaze
         // d = (halfMaze / 2) / tan(fov/2) = (mazeSize/4) / tan(fov/2)
-        const d = (mazeSize + 0.5) / 4 / Math.tan(fovInRadians);
+        const d = (mazeSize / 2 + 1) / 2 / Math.tan(fovInRadians);
 
         const ratio = window.innerWidth / window.innerHeight;
         const horizontalBlocks = 5.5 * ratio;
@@ -156,25 +160,24 @@
         let centerX, centerY;
         switch (quadrant) {
             case "top-left":
-                centerX = mazeSize / 2 - horizontalBlocks / 2;
-                centerY = mazeSize * (3 / 4);
+                centerX = mazeSize / 2 - horizontalBlocks / 2 - 0.5;
+                centerY = mazeSize * (3 / 4) + 0.5;
                 break;
             case "top-right":
-                centerX = mazeSize / 2 + horizontalBlocks / 2;
-                centerY = mazeSize * (3 / 4);
+                centerX = mazeSize / 2 + horizontalBlocks / 2 + 0.5;
+                centerY = mazeSize * (3 / 4) + 0.5;
                 break;
             case "bottom-left":
-                centerX = mazeSize / 2 - horizontalBlocks / 2;
-                centerY = mazeSize / 4;
+                centerX = mazeSize / 2 - horizontalBlocks / 2 - 0.5;
+                centerY = mazeSize / 4 - 0.5;
                 break;
             case "bottom-right":
-                centerX = mazeSize / 2 + horizontalBlocks / 2;
-                centerY = mazeSize / 4;
+                centerX = mazeSize / 2 + horizontalBlocks / 2 + 0.5;
+                centerY = mazeSize / 4 - 0.5;
                 break;
             default:
-                // default to top-left if not specified
-                centerX = mazeSize / 2 + horizontalBlocks / 2;
-                centerY = mazeSize * (3 / 4);
+                centerX = mazeSize / 2 + horizontalBlocks / 2 + 0.5;
+                centerY = mazeSize * (3 / 4) + 0.5;
                 break;
         }
 
@@ -389,25 +392,31 @@
         let player = playerMeshes[$me];
         let playerBody = playerBodies[$me];
         if (!player || !playerBody || !$isStart) return;
-        const moveSpeed = 1;
+        const moveSpeed = 3;
 
-        if (keysPressed["KeyW"]) {
-            // Move forward
-            playerBody.velocity.y = moveSpeed;
-        } else if (keysPressed["KeyS"]) {
-            // Move backward
-            playerBody.velocity.y = -moveSpeed;
-        } else {
-            playerBody.velocity.y = 0;
-        }
-        if (keysPressed["KeyA"]) {
-            // Go left
-            playerBody.velocity.x = -moveSpeed;
-        } else if (keysPressed["KeyD"]) {
-            // Go right
-            playerBody.velocity.x = moveSpeed;
-        } else {
-            playerBody.velocity.x = 0;
+        // if (keysPressed["KeyW"]) {
+        //     // Move forward
+        //     playerBody.velocity.y = moveSpeed;
+        // } else if (keysPressed["KeyS"]) {
+        //     // Move backward
+        //     playerBody.velocity.y = -moveSpeed;
+        // } else {
+        //     playerBody.velocity.y = 0;
+        // }
+        // if (keysPressed["KeyA"]) {
+        //     // Go left
+        //     playerBody.velocity.x = -moveSpeed;
+        // } else if (keysPressed["KeyD"]) {
+        //     // Go right
+        //     playerBody.velocity.x = moveSpeed;
+        // } else {
+        //     playerBody.velocity.x = 0;
+        // }
+
+        const angleData = get(angleStore);
+        if (angleData.x && angleData.y) {
+            playerBody.velocity.y = angleData.y * moveSpeed;
+            playerBody.velocity.x = angleData.x * moveSpeed;
         }
     }
 
@@ -436,6 +445,10 @@
         ready = true;
         socketClient.setReady();
     }
+
+    function updateAngle(newAngle) {
+        angleData = newAngle;
+    }
 </script>
 
 <svelte:window on:keydown={onKeyDown} on:keyup={onKeyUp} />
@@ -446,6 +459,7 @@
                 <h2>Room {gameId}</h2>
                 <p>플레이어: {totalPlayer}/4</p>
             </div>
+
             <div>
                 <h3>How to Play</h3>
                 <ol>
@@ -473,6 +487,10 @@
             <div class="arrive">도착: {$totalArrived}/4!!</div>
         {/if}
     </div>
+    <!-- <Joystick on:updateAngle={updateAngle} /> -->
+    <div class="joystick-container">
+        <Joystick></Joystick>
+    </div>
 
     <StatusLed />
     <canvas bind:this={canvas}></canvas>
@@ -487,6 +505,13 @@
         padding: 0 0;
         border: 0 0;
     }
+
+    .joystick-container {
+        position: absolute;
+        bottom: 50px;
+        left: 60px;
+    }
+
     .room-container {
         position: relative;
         width: 100vw;
