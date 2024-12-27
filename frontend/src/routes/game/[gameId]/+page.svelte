@@ -17,12 +17,14 @@
 
     // let start = $state(false);
     let ready = $state(false);
+    let win = $state(false);
     let timer = $state(15);
     const gameTime = 15;
 
     let keysPressed = {};
     // Room ID from route params
     let gameId = $derived($page.params.gameId);
+    let joyLoc = $state("");
 
     let { players, me, mapInfo, isArrive, totalArrived, isStart } = socketClient;
     let totalPlayer = $derived($players.length);
@@ -68,6 +70,12 @@
                     }, 1000);
                 } else {
                     clearInterval(interval);
+                }
+            });
+            socketClient.totalArrived.subscribe(() => {
+                if ($isStart) {
+                    clearInterval(interval);
+                    win = true;
                 }
             });
 
@@ -142,6 +150,7 @@
         buildWalls($mapInfo.vwall, "ver");
 
         setupCameraForQuadrant(10, $mapInfo.whereLocate);
+        joyLoc = get(mapInfo.whereLocate);
         // Adding gravity after map initialization.
         physicsWorld.gravity.set(0, 0, -9.8);
     }
@@ -392,7 +401,7 @@
         let player = playerMeshes[$me];
         let playerBody = playerBodies[$me];
         if (!player || !playerBody || !$isStart) return;
-        const moveSpeed = 3;
+        const moveSpeed = 2;
 
         // if (keysPressed["KeyW"]) {
         //     // Move forward
@@ -415,7 +424,7 @@
 
         const angleData = get(angleStore);
         if (angleData.x && angleData.y) {
-            playerBody.velocity.y = angleData.y * moveSpeed;
+            playerBody.velocity.y = -angleData.y * moveSpeed;
             playerBody.velocity.x = angleData.x * moveSpeed;
         }
     }
@@ -481,6 +490,12 @@
         </div>
     {/if}
 
+    {#if win}
+        <div class="ending">
+            <img src="test.jpg" alt="ending" />
+        </div>
+    {/if}
+
     <div class="game-status">
         <div class="timer">{timer}</div>
         {#if $isArrive}
@@ -488,7 +503,7 @@
         {/if}
     </div>
     <!-- <Joystick on:updateAngle={updateAngle} /> -->
-    <div class="joystick-container">
+    <div class={`joystick-container ${joyLoc}`}>
         <Joystick></Joystick>
     </div>
 
@@ -510,6 +525,23 @@
         position: absolute;
         bottom: 50px;
         left: 60px;
+    }
+
+    .top-left {
+        top: 50px;
+        left: 60px;
+    }
+    .top-right {
+        top: 50px;
+        right: 60px;
+    }
+    .bottom-left {
+        bottom: 50px;
+        left: 60px;
+    }
+    .bottom-right {
+        bottom: 50px;
+        right: 60px;
     }
 
     .room-container {

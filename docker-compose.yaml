@@ -1,0 +1,15 @@
+services:
+    mirofront:
+        image: ghcr.io/yoonhero/miro-front:latest
+        ports:
+            - "5700:3000"
+        restart: always
+    miroserver:
+        image: ghcr.io/yoonhero/miro-server:latest
+        ports:
+            - "3000:3000"
+        restart: always
+        healthcheck:
+            test: "ss --listening --tcp | grep -P 'LISTEN.+:smtp' || exit 1"
+            timeout: 3s
+            retries: 0
