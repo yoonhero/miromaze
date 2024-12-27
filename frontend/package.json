@@ -25,6 +25,7 @@
 		"nipplejs": "^0.10.2",
 		"socket.io": "^4.8.1",
 		"socket.io-client": "^4.8.1",
+		"svelte-fullscreen": "^2.0.0",
 		"svelte-spa-router": "^4.0.1",
 		"three": "^0.171.0"
 	}

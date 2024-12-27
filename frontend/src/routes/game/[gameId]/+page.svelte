@@ -9,17 +9,18 @@
     import "@fontsource-variable/sixtyfour-convergence";
     // Supports weights 100-900
     import "@fontsource-variable/hahmlet";
-    import { get, writable } from "svelte/store";
+    import { derived, get, writable } from "svelte/store";
     import { browser } from "$app/environment";
     import Joystick from "$lib/components/joystick.svelte";
     import { angleStore } from "$lib/store";
     // import BtController from "$lib/networking/btController.svelte";
+    import Fullscreen from "svelte-fullscreen";
 
     // let start = $state(false);
     let ready = $state(false);
     let win = $state(false);
-    let timer = $state(15);
-    const gameTime = 15;
+    let timer = $state(30);
+    const gameTime = 30;
 
     let keysPressed = {};
     // Room ID from route params
@@ -42,6 +43,10 @@
 
     let cannonDebugger;
     let interval;
+
+    const WALL = "wall";
+    const GROUND = "ground";
+    const PLAYER = "player";
 
     onMount(async () => {
         // Connect to socket server
@@ -72,8 +77,8 @@
                     clearInterval(interval);
                 }
             });
-            socketClient.totalArrived.subscribe(() => {
-                if ($isStart) {
+            socketClient.totalArrived.subscribe((arrived) => {
+                if ($isStart && arrived == 4) {
                     clearInterval(interval);
                     win = true;
                 }
@@ -150,7 +155,7 @@
         buildWalls($mapInfo.vwall, "ver");
 
         setupCameraForQuadrant(10, $mapInfo.whereLocate);
-        joyLoc = get(mapInfo.whereLocate);
+        joyLoc = $mapInfo.whereLocate;
         // Adding gravity after map initialization.
         physicsWorld.gravity.set(0, 0, -9.8);
     }
@@ -227,12 +232,21 @@
         }
     }
 
+    function resetPosition(playerBody) {
+        // console.log(playerBody.userData.startPos);
+        playerBody.position.x = playerBody.userData.startPos.x;
+        playerBody.position.y = playerBody.userData.startPos.y;
+        playerBody.position.z = plane_z - 0.5 + 0.25;
+        playerBody.velocity.z = 0;
+    }
+
     function addPlayer(player, isMe) {
         if (!scene) return;
         const { id, position, color } = player;
         const { playerMesh, playerBody } = drawPlayer([position.x, position.y], player);
         playerMesh.userData.id = id; // player.id to move it
         playerBody.userData = {};
+        playerBody.userData["type"] = PLAYER;
         playerBody.userData.id = id;
         playerBody.userData.startPos = position;
         playerMeshes[id] = playerMesh;
@@ -241,7 +255,11 @@
         physicsWorld.addBody(playerBody);
         if (isMe) {
             playerBody.addEventListener("collide", (event) => {
-                if (!event.body.userData) {
+                if (event.body.userData["type"] == WALL) {
+                    resetPosition(playerBody);
+                    console.log("WALL TOUCHED");
+                }
+                if (!event.body.userData["type"] != PLAYER) {
                     return;
                 }
                 // console.log(playerBodies[$me]);
@@ -274,6 +292,8 @@
             let { x: xi, y: yi } = pos;
             let c = { x: xi, y: yi, z: env_z };
             const { wall, wallBody } = drawWall(c, axis);
+            wallBody.userData = {};
+            wallBody.userData["type"] = WALL;
             scene.add(wall);
             physicsWorld.addBody(wallBody);
         });
@@ -289,9 +309,14 @@
                 const isEnd = endPos.x == j && endPos.y == i;
                 let pos = [j, i, plane_z];
                 const { cube, groundBody } = drawCube(pos, isEnd);
+                groundBody.userData = {};
+                groundBody.userData["type"] = GROUND;
                 cubes[i].push(cube);
+                // 떨어지는 바닥 = 사실 없는 바닥
+                // if (0.03 < Math.random()) {
                 scene.add(cube);
                 physicsWorld.addBody(groundBody);
+                // }
             }
         }
     }
@@ -383,6 +408,10 @@
                 publishPos($me);
             }
 
+            if (myPlayerBody.position.z < -10) {
+                resetPosition(myPlayerBody);
+            }
+
             // sqrt(2) = 1.414
             if (Math.sqrt(Math.pow(myPlayerBody.position.x - $mapInfo.endPos.x, 2) + Math.pow(myPlayerBody.position.y - $mapInfo.endPos.y, 2)) < 0.75) {
                 isArrive.set(true);
@@ -461,55 +490,63 @@
 </script>
 
 <svelte:window on:keydown={onKeyDown} on:keyup={onKeyUp} />
-<div class="room-container">
-    {#if !$isStart}
-        <div class="room-info">
-            <div class="cur">
-                <h2>Room {gameId}</h2>
-                <p>플레이어: {totalPlayer}/4</p>
+
+<Fullscreen let:onRequest let:onExit>
+    <div class="room-container">
+        {#if !$isStart}
+            <div class="room-info">
+                <div class="cur">
+                    <h2>Room {gameId}</h2>
+                    <p>플레이어: {totalPlayer}/4</p>
+                </div>
+
+                <!-- <div>
+                    <h3>How to Play</h3>
+                    <ol>
+                        <li>4개의 패드 또는 핸드폰을 모은 후에 각각 컨트롤러의 블루투스와 연결합니다.(아이폰은 안됨요..)</li>
+                        <li>이 주소로 접속한 후에 4개의 기기를 잘 배열하여 하나의 큰 맵을 만듭니다.</li>
+                        <li>
+                            Ready! 버튼을 누른 후에 게임이 시작하면 15초 안에 머리에 쓴 컨트롤러를 다른 사람이 조정하여 가운데 도착 지점에 모두가 도착하면 성공!
+                        </li>
+                    </ol>
+                </div> -->
+
+                <button onclick={() => setReady()} disabled={ready}>
+                    {#if ready}
+                        Waiting...
+                    {:else}
+                        Ready!
+                    {/if}
+                </button>
+
+                <button onclick={() => onRequest()}>Full Screen</button>
             </div>
-
-            <div>
-                <h3>How to Play</h3>
-                <ol>
-                    <li>4개의 패드 또는 핸드폰을 모은 후에 각각 컨트롤러의 블루투스와 연결합니다.(아이폰은 안됨요..)</li>
-                    <li>이 주소로 접속한 후에 4개의 기기를 잘 배열하여 하나의 큰 맵을 만듭니다.</li>
-                    <li>
-                        Ready! 버튼을 누른 후에 게임이 시작하면 15초 안에 머리에 쓴 컨트롤러를 다른 사람이 조정하여 가운데 도착 지점에 모두가 도착하면 성공!
-                    </li>
-                </ol>
-            </div>
-
-            <button onclick={() => setReady()} disabled={ready}>
-                {#if ready}
-                    Waiting...
-                {:else}
-                    Ready!
-                {/if}
-            </button>
-        </div>
-    {/if}
-
-    {#if win}
-        <div class="ending">
-            <img src="test.jpg" alt="ending" />
-        </div>
-    {/if}
-
-    <div class="game-status">
-        <div class="timer">{timer}</div>
-        {#if $isArrive}
-            <div class="arrive">도착: {$totalArrived}/4!!</div>
         {/if}
-    </div>
-    <!-- <Joystick on:updateAngle={updateAngle} /> -->
-    <div class={`joystick-container ${joyLoc}`}>
-        <Joystick></Joystick>
-    </div>
 
-    <StatusLed />
-    <canvas bind:this={canvas}></canvas>
-</div>
+        {#if win}
+            <div class="ending">
+                <h1>참 잘했어요! 역경을 이겨내시다니!</h1>
+                <div />
+                <p>RoMeLa 13기 일동.</p>
+                <img src="/goodjob.jpg" alt="ending" />
+            </div>
+        {/if}
+
+        <div class="game-status">
+            <div class="timer">{timer}</div>
+            {#if $isArrive}
+                <div class="arrive">도착: {$totalArrived}/4!!</div>
+            {/if}
+        </div>
+        <!-- <Joystick on:updateAngle={updateAngle} /> -->
+        <div class="joystick-container {joyLoc}">
+            <Joystick></Joystick>
+        </div>
+
+        <StatusLed />
+        <canvas bind:this={canvas}></canvas>
+    </div>
+</Fullscreen>
 
 <style>
     html,
@@ -523,8 +560,6 @@
 
     .joystick-container {
         position: absolute;
-        bottom: 50px;
-        left: 60px;
     }
 
     .top-left {
@@ -542,6 +577,42 @@
     .bottom-right {
         bottom: 50px;
         right: 60px;
+    }
+
+    .ending {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(204, 201, 201, 0.859);
+        color: white;
+        padding: 30px 20px;
+        border-radius: 10px;
+        z-index: 10;
+        text-align: center;
+        font-size: 15px;
+        font-family: "Hahmlet Variable", serif;
+        font-weight: 400;
+    }
+
+    .ending > img {
+        width: 60%;
+    }
+
+    .ending > h1 {
+        color: black;
+    }
+
+    .ending > div {
+        border: 1px solid black;
+        height: 1px;
+        width: 100%;
+        margin: 10px 0;
+    }
+
+    .ending > p {
+        color: black;
+        margin: 5px 0;
     }
 
     .room-container {
