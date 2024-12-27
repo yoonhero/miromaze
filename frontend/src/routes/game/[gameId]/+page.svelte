@@ -236,7 +236,7 @@
         // console.log(playerBody.userData.startPos);
         playerBody.position.x = playerBody.userData.startPos.x;
         playerBody.position.y = playerBody.userData.startPos.y;
-        playerBody.position.z = plane_z - 0.5 + 0.25;
+        // playerBody.position.z = plane_z - 0.5 + 0.25;
         playerBody.velocity.z = 0;
     }
 
